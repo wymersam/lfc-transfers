@@ -1,10 +1,9 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -23,25 +22,18 @@ func addColourToHeadline(headline string) string {
 	return headline
 }
 
-func sendToDiscord(webhookURL, title, headline, link string) {
-	// Creates a nice-looking card in Discord
-	payload := map[string]interface{}{
-		"embeds": []map[string]interface{}{
-			{
-				"title":       title,
-				"description": headline + "\n\n[Read Article](" + link + ")",
-				"color":       15158272, // LFC Red
-				"thumbnail": map[string]string{
-					"url": "https://upload.wikimedia.org/wikipedia/en/thumb/0/0c/Liverpool_FC.svg/1200px-Liverpool_FC.svg.png",
-				},
-			},
-		},
+func sendToTelegram(token, chatID, text string) {
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
+
+	// Telegram uses standard URL values
+	data := url.Values{
+		"chat_id":    {chatID},
+		"text":       {text},
+		"parse_mode": {"Markdown"}, // Lets you use bold/links
 	}
 
-	jsonData, _ := json.Marshal(payload)
-	http.Post(webhookURL, "application/json", bytes.NewBuffer(jsonData))
+	http.PostForm(apiURL, data)
 }
-
 func main() {
 
 	newsSource := []NewsSource{
@@ -49,10 +41,11 @@ func main() {
 		{Name: "Liverpool Echo", Link: "https://www.liverpoolecho.co.uk/all-about/liverpool-fc"},
 	}
 
-	webhookURL := os.Getenv("DISCORD_WEBHOOK_URL")
+	telegramToken := os.Getenv("TELEGRAM_TOKEN")
+	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
 
-	if webhookURL == "" {
-		fmt.Println("❌ Error: DISCORD_LFC_WEBHOOK not found in environment!")
+	if telegramToken == "" || telegramChatID == "" {
+		fmt.Println("❌ Error: TELEGRAM_TOKEN or TELEGRAM_CHAT_ID not found in environment!")
 		return
 	}
 
@@ -65,7 +58,7 @@ func main() {
 			if strings.Contains(strings.ToLower(item.Headline), "gossip") ||
 				strings.Contains(strings.ToLower(item.Headline), "transfer") {
 
-				sendToDiscord(webhookURL, "🚨 LFC Transfer Gossip", item.Headline, item.Link)
+				sendToTelegram(telegramToken, telegramChatID, "🚨 LFC Transfer Gossip\n"+item.Headline+"\n\n[Read Article]("+item.Link+")")
 
 				err := beeep.Notify(
 					"LFC Scout: "+item.Source, // Title
